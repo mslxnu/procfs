@@ -615,7 +615,7 @@ target: a recognised name (`hup`, `int`/`interrupt`, `quit`, `kill`, `term`,
 `stop`, `cont`, `usr1`, `usr2`) or a numeric signal is posted via `proc_signal()`,
 and anything else returns `EINVAL`. Reads return `EINVAL` (the node is
 write-only), as on NetBSD. Permission is the filesystem's own model: the node's
-write mode is owner/group (or root under `noprocperms`), so only a user who owns
+write mode is owner/group, so only a user who owns
 the target process — or root — can open it for writing. Writing is via the newly
 added `vnop_write`; a companion `vnop_setattr` accepts the `O_TRUNC` that shells
 issue on `>` so `echo kill > /proc/<pid>/note` works. Because a read-only mount

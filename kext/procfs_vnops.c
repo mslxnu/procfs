@@ -33,19 +33,9 @@
 #define READ_EXECUTE_ALL (S_IRUSR|S_IXUSR|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH)
 
 /*
- * Read and permission for all users.
+ * Read permission for all users.
  */
 #define READ_ALL (S_IRUSR|S_IRGRP|S_IROTH)
-
-/*
- * Read/write/execute permissions for owner, read/execute for group and owner.
- */
-#define RWX_OWNER_RX_ALL (S_IRUSR|S_IWUSR|S_IXUSR|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH)
-
-/*
- * Read, write and execute permissions for owner and group only.
- */
-#define ALL_ACCESS_OWNER_GROUP_ONLY (S_IRUSR|S_IWUSR|S_IXUSR|S_IRGRP|S_IWGRP|S_IXGRP)
 
 /*
  * Read, write and execute permissions for everone.
@@ -1143,132 +1133,38 @@ procfs_vnop_getattr(struct vnop_getattr_args *ap)
     }
 
     /*
-     * Permissions usually allow access only for the node's owning process and group,
-     * but the "noprocperms" mount option can be used to allow read and execute access
-     * to all users, if required. We reflect this by setting "modemask" to limit the
-     * permissions that will be returned.
+     * Report Linux-style fixed modes: directories 0555 (r-xr-xr-x), regular
+     * files 0444 (r--r--r--), symlinks 0777. On Linux every /proc node is
+     * world-readable, so these bits are not owner-restricted (the historical
+     * "noprocperms" modemask is gone). Access to another user's process data is
+     * still gated at lookup/readdir by procfs_should_access_check (the
+     * "noprocperms" mount option), not by these mode bits; natively
+     * procfs_vnop_access grants and the guest/consumer enforces on the mode.
+     * Writable pseudo-files (note, clear_refs) get their write bits below.
      */
     pfsmount_t *pmp = vfs_mp_to_procfs_mp(vnode_mount(vp));
-    mode_t modemask = (pmp->pmnt_flags & PROCFS_MOPT_NOPROCPERMS) ? RWX_OWNER_RX_ALL : ALL_ACCESS_OWNER_GROUP_ONLY;
 
     struct vnode_attr *vap = ap->a_vap;
     switch (node_type) {
-    case PFSroot:
-        /*
-         * Root directory is accessible to everyone.
-         */
-        VATTR_RETURN(vap, va_mode, READ_EXECUTE_ALL);
-        break;
-
-    case PFSproc:
-        VATTR_RETURN(vap, va_mode, READ_EXECUTE_ALL & modemask);
-        break;
-
-    case PFSthread:
-        VATTR_RETURN(vap, va_mode, READ_EXECUTE_ALL & modemask);
-        break;
-
-    case PFSdir:
-        VATTR_RETURN(vap, va_mode, READ_EXECUTE_ALL & modemask);
-        break;
-
-    case PFSfile:
-        VATTR_RETURN(vap, va_mode, READ_EXECUTE_ALL & modemask);
-        break;
-
-    case PFScpuinfo:
-        VATTR_RETURN(vap, va_mode, READ_EXECUTE_ALL & modemask);
-        break;
-
-    case PFSloadavg:
-        VATTR_RETURN(vap, va_mode, READ_EXECUTE_ALL & modemask);
-        break;
-
-    case PFSmeminfo:
-        VATTR_RETURN(vap, va_mode, READ_EXECUTE_ALL & modemask);
-        break;
-
-    case PFSmtab:
-        VATTR_RETURN(vap, va_mode, READ_EXECUTE_ALL & modemask);
-        break;
-
-    case PFSstat:
-        VATTR_RETURN(vap, va_mode, READ_EXECUTE_ALL & modemask);
-        break;
-
-    case PFSvmstat:
-        VATTR_RETURN(vap, va_mode, READ_EXECUTE_ALL & modemask);
-        break;
-
-    case PFSpartitions:
-        VATTR_RETURN(vap, va_mode, READ_EXECUTE_ALL & modemask);
-        break;
-
-    case PFSversion:
-        VATTR_RETURN(vap, va_mode, READ_EXECUTE_ALL & modemask);
-        break;
-
-    case PFSuptime:         /* FALLTHROUGH */
-    case PFSswaps:          /* FALLTHROUGH */
-    case PFSfilesystems:    /* FALLTHROUGH */
-    case PFSextensions:     /* FALLTHROUGH */
-    case PFSmodules:        /* FALLTHROUGH */
-    case PFSdiskstats:      /* FALLTHROUGH */
-    case PFSdevices:        /* FALLTHROUGH */
-    case PFSnetdev:         /* FALLTHROUGH */
-    case PFSallocinfo:      /* FALLTHROUGH */
-    case PFSapm:            /* FALLTHROUGH */
-    case PFSbootconfig:     /* FALLTHROUGH */
-    case PFSbuddyinfo:      /* FALLTHROUGH */
-    case PFSpcidevices:     /* FALLTHROUGH */
-    case PFSdma:            /* FALLTHROUGH */
-    case PFSrtc:            /* FALLTHROUGH */
-    case PFSexecdomains:    /* FALLTHROUGH */
-    case PFSfb:             /* FALLTHROUGH */
-    case PFSnfsexports:     /* FALLTHROUGH */
-    case PFSinterrupts:     /* FALLTHROUGH */
-    case PFSirq:            /* FALLTHROUGH */
-    case PFStty:            /* FALLTHROUGH */
-    case PFSioports:        /* FALLTHROUGH */
-    case PFSiomem:          /* FALLTHROUGH */
-    case PFSsoftirqs:       /* FALLTHROUGH */
-    case PFSkcmdline:       /* FALLTHROUGH */
-    case PFSide:            /* FALLTHROUGH */
-    case PFSvmallocinfo:    /* FALLTHROUGH */
-    case PFSisapnp:         /* FALLTHROUGH */
-    case PFSscsi:           /* FALLTHROUGH */
-    case PFSsysvipc:        /* FALLTHROUGH */
-    case PFSpagetypeinfo:   /* FALLTHROUGH */
-    case PFSslabinfo:       /* FALLTHROUGH */
-    case PFSlocks:          /* FALLTHROUGH */
-    case PFSkcore:          /* FALLTHROUGH */
-    case PFSkmsg:           /* FALLTHROUGH */
-    case PFSlastkmsg:       /* FALLTHROUGH */
-    case PFSksyms:          /* FALLTHROUGH */
-    case PFSmisc:
-        VATTR_RETURN(vap, va_mode, READ_EXECUTE_ALL & modemask);
-        break;
-
-    case PFSdirthis:
-        VATTR_RETURN(vap, va_mode, READ_EXECUTE_ALL & modemask);
-        break;
-
-    case PFSdirparent:
-        VATTR_RETURN(vap, va_mode, READ_EXECUTE_ALL & modemask);
-        break;
-
-    case PFSfd:
-        VATTR_RETURN(vap, va_mode, READ_EXECUTE_ALL);
-        break;
-
     case PFScurproc:        /* Symbolic link to the calling process (FALLTHRU) */
     case PFSprocnamedir:    /* Symbolic link to a process directory (FALLTHRU) */
     case PFSproclink:       /* Per-process exe/cwd/root symlink */
         VATTR_RETURN(vap, va_mode, ALL_ACCESS_ALL);   /* All access - target will determine actual access. */
         break;
 
-    case PFSsysctl:         /* /proc/sys directory or leaf */
-        VATTR_RETURN(vap, va_mode, READ_EXECUTE_ALL & modemask);
+    case PFSsysctl:         /* /proc/sys node: directory or leaf per oid */
+        VATTR_RETURN(vap, va_mode,
+            procfs_sysctl_is_node(procfs_node->node_id.nodeid_objectid)
+                ? READ_EXECUTE_ALL : READ_ALL);
+        break;
+
+    default:
+        /*
+         * Everything else classifies via the shared directory predicate:
+         * directories are 0555, regular files 0444.
+         */
+        VATTR_RETURN(vap, va_mode,
+            procfs_is_directory_type(node_type) ? READ_EXECUTE_ALL : READ_ALL);
         break;
     }
 
@@ -1278,14 +1174,14 @@ procfs_vnop_getattr(struct vnop_getattr_args *ap)
      * data function. open(O_WRONLY) would otherwise be rejected before write.
      */
     if (snode->psn_read_data_fn == procfs_donote) {
-        VATTR_RETURN(vap, va_mode, RW_OWNER_GROUP & modemask);
+        VATTR_RETURN(vap, va_mode, RW_OWNER_GROUP);
     }
     /*
      * clear_refs is write-only (Linux mode 0200): a working-set knob written to,
      * never read. Grant owner/group write so open(O_WRONLY) is permitted.
      */
     if (snode->psn_read_data_fn == procfs_doclear_refs) {
-        VATTR_RETURN(vap, va_mode, (S_IWUSR | S_IWGRP) & modemask);
+        VATTR_RETURN(vap, va_mode, S_IWUSR | S_IWGRP);
     }
 
     /*
