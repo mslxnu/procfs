@@ -1219,27 +1219,24 @@ procfs_vnop_getattr(struct vnop_getattr_args *ap)
     VATTR_RETURN(vap, va_modify_time, create_time);
 
     /*
-     * Set the UID/GID from the credentials of the process that
-     * corresponds to the pfsnode_t, if there is one. There
-     * is no process for the root node. For other nodes. the uid
-     * and gid are the real ids for the current process.
+     * Owner of the node. A process node (/proc/<pid>/...) is owned by that
+     * process's real uid/gid - as on Linux, and so ps's USER column and
+     * ownership-sensitive tools see the process owner, not whoever is reading
+     * /proc. System-wide nodes (root, /proc/sys, /proc/meminfo, ...) have no
+     * backing process and are owned by root, matching Linux.
      */
-    proc_t current = current_proc();
-    kauth_cred_t proc_cred = kauth_cred_proc_ref(current);
-    uid_t uid = current == NULL ? (uid_t)0 : kauth_cred_getruid(proc_cred);
-    gid_t gid = current == NULL ? (gid_t)0 : kauth_cred_getgid(proc_cred);
+    uid_t uid = 0;
+    gid_t gid = 0;
     if (p != NULL) {
-        /*
-         * Get the effective uid and gid from the process.
-         */
-        uid = kauth_cred_getuid(proc_cred);
-        gid = kauth_cred_getgid(proc_cred);
+        kauth_cred_t pcred = kauth_cred_proc_ref(p);
+        uid = kauth_cred_getruid(pcred);
+        gid = kauth_cred_getrgid(pcred);
+        kauth_cred_unref(&pcred);
 
         proc_rele(p);
     }
     VATTR_RETURN(vap, va_uid, uid);
     VATTR_RETURN(vap, va_gid, gid);
-    kauth_cred_unref(&proc_cred);
 
     return 0;
 }
