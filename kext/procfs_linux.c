@@ -1127,59 +1127,100 @@ procfs_doexecdomains(__unused pfsnode_t *pnp, uio_t uio, __unused vfs_context_t 
 }
 
 /*
- * Linux-compatible /proc/meminfo, modelled on FreeBSD's linprocfs_domeminfo()
- * (sys/compat/linux/linprocfs/linprocfs.c) - same field set and "%9lu kB"
- * layout, and the same "all memory that isn't wired down is free" estimate
- * (FreeBSD: memused = vm_wire_count * PAGE_SIZE; memfree = memtotal - memused).
+ * Linux-compatible /proc/meminfo. The field set follows Linux's classic layout
+ * so tools that parse meminfo (procps free/top, etc.) find what they expect.
  *
- * Data sources differ on macOS. MemTotal comes from the hw.memsize sysctl
- * (readable from kernel context). The wired-page count comes from the procfsd
- * daemon's host_statistics64(HOST_VM_INFO64) (a vm_statistics64, via
- * PROCFS_REQ_VMSTAT); the vm.* page-count sysctls are not readable from kernel
- * context and most vm_page_*_count globals are stripped on arm64. Cached,
- * Buffers and swap have no comparable source on arm64 and are reported as 0
- * (Buffers is 0 on FreeBSD too). Without a connected daemon the wired count is
- * unavailable and MemFree is reported as 0 rather than guessed.
+ * Data sources on macOS:
+ *   - MemTotal        hw.memsize sysctl (readable from kernel context).
+ *   - MemFree         free page count       } from the procfsd daemon's
+ *   - Cached          external (file) pages  } host_statistics64(HOST_VM_INFO64)
+ *   - Active/Inactive active/inactive pages  } (vm_statistics64, PROCFS_REQ_VMSTAT).
+ *   - Swap{Total,Free} vm.swapusage, fetched through the daemon's named-sysctl
+ *                     bridge (vm.* sysctls are not readable from kernel context).
+ *   - Low{Total,Free} mirror Mem{Total,Free}; High* are 0 (no high memory on 64-bit).
+ *   - Hugepagesize    the arm64 2 MB superpage.
+ *
+ * The remaining Linux fields (Buffers, SwapCached, Dirty, Writeback, Mapped,
+ * Slab, Committed_AS, PageTables, Vmalloc*, HugePages_*) have no comparable macOS
+ * counter and are reported as 0, as FreeBSD's linprocfs does for the same reason.
+ * Without a connected daemon the vm_statistics64 figures are 0.
  */
 int
 procfs_domeminfo(__unused pfsnode_t *pnp, uio_t uio, __unused vfs_context_t ctx)
 {
     int error = 0;
 
-    unsigned long cached = 0, buffers = 0, memfree = 0;
-    unsigned long long swaptotal = 0, swapfree = 0;
-
-    char buf[512];
-
     uint64_t memtotal = 0;                       /* total memory in bytes */
     size_t sz = sizeof(memtotal);
     (void)sysctlbyname("hw.memsize", &memtotal, &sz, NULL, 0);
 
+    uint64_t memfree = 0, cached = 0, active = 0, inactive = 0;
+
     vm_statistics64_data_t vm;
     bzero(&vm, sizeof(vm));
     uint32_t got = 0;
-
     if (procfs_ctl_request(PROCFS_REQ_VMSTAT, 0, 0, &vm, sizeof(vm), &got) == 0 &&
         got == sizeof(vm)) {
-        uint64_t wired = (uint64_t)vm.wire_count * PAGE_SIZE;
-        memfree = (unsigned long)(memtotal > wired ? memtotal - wired : 0);
+        memfree  = (uint64_t)vm.free_count          * PAGE_SIZE;
+        cached   = (uint64_t)vm.external_page_count * PAGE_SIZE;
+        active   = (uint64_t)vm.active_count        * PAGE_SIZE;
+        inactive = (uint64_t)vm.inactive_count      * PAGE_SIZE;
+    }
+
+    /*
+     * Swap: vm.swapusage returns a struct xsw_usage. It is not readable from
+     * kernel context, so fetch it as raw bytes through the daemon's named-sysctl
+     * request (the same bridge /proc/sys leaves use).
+     */
+    uint64_t swaptotal = 0, swapfree = 0;
+    struct xsw_usage sw;
+    bzero(&sw, sizeof(sw));
+    uint32_t swgot = 0;
+    if (procfs_ctl_request_named(PROCFS_REQ_SYSCTL, 0, 0, "vm.swapusage",
+            &sw, sizeof(sw), &swgot) == 0 && swgot >= 3 * sizeof(uint64_t)) {
+        swaptotal = sw.xsu_total;
+        swapfree  = sw.xsu_avail;
     }
 
     struct sbuf sb;
-    if (sbuf_new(&sb, buf, sizeof(buf), SBUF_FIXEDLEN) == NULL) {
+    if (sbuf_new(&sb, NULL, 1024, SBUF_AUTOEXTEND) == NULL) {
         return ENOMEM;
     }
     sbuf_printf(&sb,
-        "MemTotal: %9lu kB\n"
-        "MemFree:  %9lu kB\n"
-        "MemShared:%9lu kB\n"
-        "Buffers:  %9lu kB\n"
-        "Cached:   %9lu kB\n"
-        "SwapTotal:%9llu kB\n"
-        "SwapFree: %9llu kB\n",
-        (unsigned long)B2K(memtotal), (unsigned long)B2K(memfree), 0UL,
-        (unsigned long)B2K(buffers), (unsigned long)B2K(cached),
-        (unsigned long long)B2K(swaptotal), (unsigned long long)B2K(swapfree));
+        "MemTotal:       %8llu kB\n"
+        "MemFree:        %8llu kB\n"
+        "Buffers:        %8llu kB\n"
+        "Cached:         %8llu kB\n"
+        "SwapCached:     %8llu kB\n"
+        "Active:         %8llu kB\n"
+        "Inactive:       %8llu kB\n"
+        "HighTotal:      %8llu kB\n"
+        "HighFree:       %8llu kB\n"
+        "LowTotal:       %8llu kB\n"
+        "LowFree:        %8llu kB\n"
+        "SwapTotal:      %8llu kB\n"
+        "SwapFree:       %8llu kB\n"
+        "Dirty:          %8llu kB\n"
+        "Writeback:      %8llu kB\n"
+        "Mapped:         %8llu kB\n"
+        "Slab:           %8llu kB\n"
+        "Committed_AS:   %8llu kB\n"
+        "PageTables:     %8llu kB\n"
+        "VmallocTotal:   %8llu kB\n"
+        "VmallocUsed:    %8llu kB\n"
+        "VmallocChunk:   %8llu kB\n"
+        "HugePages_Total:%8llu\n"
+        "HugePages_Free: %8llu\n"
+        "Hugepagesize:   %8llu kB\n",
+        (unsigned long long)B2K(memtotal), (unsigned long long)B2K(memfree),
+        0ULL, (unsigned long long)B2K(cached), 0ULL,
+        (unsigned long long)B2K(active), (unsigned long long)B2K(inactive),
+        0ULL, 0ULL,
+        (unsigned long long)B2K(memtotal), (unsigned long long)B2K(memfree),
+        (unsigned long long)B2K(swaptotal), (unsigned long long)B2K(swapfree),
+        0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL,
+        0ULL, 0ULL, 0ULL, 0ULL, 0ULL,
+        (unsigned long long)(2 * 1024));                 /* 2 MB superpage in kB */
 
     sbuf_finish(&sb);
     error = procfs_copy_data(sbuf_data(&sb), sbuf_len(&sb), uio);
