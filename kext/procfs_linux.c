@@ -1744,10 +1744,31 @@ procfs_pctx_get(pfsnode_t *pnp, struct procfs_pctx *c)
     c->ppid     = proc_ppid(p);
     c->pgid     = proc_pgrpid(p);
     c->sid      = proc_sessionid(p);
-    c->nthreads = procfs_get_task_thread_count(p);
     c->state    = procfs_proc_state(p->p_stat);
 
-    (void)procfs_task_vm_sizes(p, &c->vsize, &c->rsize);
+    /*
+     * Memory sizes and thread count come from the daemon's proc_taskinfo
+     * (proc_pidinfo, which needs no task port). The in-kernel alternatives -
+     * the VM-map walk in procfs_task_vm_sizes and procfs_get_task_thread_count -
+     * go through task_for_pid, so they return 0 for the SIP/hardened processes
+     * whose task port is denied; we fall back to them only when no daemon is
+     * connected. proc_taskinfo also reports the number of running threads, which
+     * refines the coarse BSD p_stat (almost always SRUN) into Linux's
+     * running/sleeping split the way ps and top do - so an idle daemon reports
+     * 'S', not 'R'. Zombie/stopped/idle states from p_stat are left as-is.
+     */
+    struct proc_taskinfo ti;
+    if (procfs_task_info(pnp, &ti) == 0) {
+        c->vsize    = ti.pti_virtual_size;
+        c->rsize    = ti.pti_resident_size;
+        c->nthreads = ti.pti_threadnum;
+        if (c->state == 'R' && ti.pti_numrunning == 0) {
+            c->state = 'S';
+        }
+    } else {
+        c->nthreads = procfs_get_task_thread_count(p);
+        (void)procfs_task_vm_sizes(p, &c->vsize, &c->rsize);
+    }
 
     proc_name(c->pid, c->comm, sizeof(c->comm));
     proc_rele(p);
