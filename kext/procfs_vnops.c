@@ -180,10 +180,26 @@ int procfs_vnop_inactive(__unused struct vnop_inactive_args *ap)
     return 0;
 }
 
+/*
+ * Catch-all for every vnode operation this file system does not implement.
+ *
+ * This MUST report failure. Returning 0 tells VFS "handled, successfully" for
+ * operations we never touched - so the caller reads back output parameters we
+ * never wrote. That is not theoretical: getxattr/listxattr appear to succeed
+ * with an uninitialised result length, pathconf yields an uninitialised limit,
+ * and pagein claims to have filled a page it never faulted in. Finder, the Dock
+ * and LaunchServices query exactly those on paths they enumerate, which makes
+ * the damage look like a system problem rather than a filesystem one: launches
+ * and pasteboard operations wedge, and processes that consumed a bogus value
+ * never recover.
+ *
+ * ENOTSUP is what VFS expects from an unsupported optional operation, and it
+ * handles it gracefully everywhere.
+ */
 STATIC
 int procfs_vnop_default(__unused struct vnop_generic_args *arg)
 {
-    return 0;
+    return ENOTSUP;
 }
 
 /*

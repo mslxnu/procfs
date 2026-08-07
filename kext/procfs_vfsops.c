@@ -75,6 +75,7 @@ STATIC int procfs_mount(struct mount *mp, vnode_t devvp, user_addr_t data, vfs_c
 STATIC int procfs_unmount(struct mount *mp, int mntflags, vfs_context_t context);
 STATIC int procfs_root(struct mount *mp, struct vnode **vpp, vfs_context_t context);
 STATIC int procfs_getattr(struct mount *mp, struct vfs_attr *fsap, vfs_context_t context);
+STATIC int procfs_sync(struct mount *mp, int waitfor, vfs_context_t context);
 
 STATIC void populate_statfs_info(struct mount *mp, struct vfsstatfs *statfsp);
 STATIC void populate_vfs_attr(struct mount *mp, struct vfs_attr *fsap);
@@ -95,6 +96,7 @@ struct vfsops procfs_vfsops = {
     .vfs_unmount        = procfs_unmount,
     .vfs_root           = procfs_root,
     .vfs_getattr        = procfs_getattr,
+    .vfs_sync           = procfs_sync,
     .vfs_init           = procfs_init,
 };
 
@@ -162,6 +164,16 @@ procfs_mount(struct mount *mp, __unused vnode_t devvp, user_addr_t data, __unuse
         procfs_mp->pmnt_mp = mp;
         nanotime(&procfs_mp->pmnt_mount_time);
         vfs_setfsprivate(mp, procfs_mp);
+
+        /*
+         * Let VFS allocate a system-wide unique fsid for this mount.
+         *
+         * This must not be hand-rolled. The low word of f_fsid is the device
+         * id, and userspace - CoreServices in particular - requires it to be
+         * unique across every mounted volume; it aborts on a duplicate. See the
+         * discussion in populate_statfs_info().
+         */
+        vfs_getnewfsid(mp);
 
         /*
          * Install procfs-specific flags and augment the generic mount flags.
@@ -327,6 +339,26 @@ procfs_create_root_vnode(mount_t mp, pfsnode_t *pnp, vnode_t *vpp)
 #pragma mark File System Attributes
 
 /*
+ * Flushes the file system's data to permanent storage. procfs has no backing
+ * store - every node is synthesised on demand from live kernel state - so there
+ * is nothing to flush and this always succeeds.
+ *
+ * Registering it is not optional. VFS_SYNC is called by the sync(2) system call
+ * and, critically, by dounmount() before it will unmount a filesystem that is
+ * not MNT_RDONLY. This mount is deliberately not MNT_RDONLY (procfs has
+ * writable nodes), so with no handler here the VFS layer substitutes a stub
+ * that returns ENOTSUP and "umount /proc" fails with "Operation not supported"
+ * unless -f is given.
+ */
+STATIC int
+procfs_sync(__unused struct mount *mp, __unused int waitfor,
+            __unused vfs_context_t context)
+{
+    return 0;
+}
+
+
+/*
  * Initializes a vfsstatfs structure with values that are
  * appropriate for a given mount of this file system. Most
  * values are fixed because this structure has limited meaning
@@ -345,12 +377,24 @@ populate_statfs_info(struct mount *mp, struct vfsstatfs *statfsp)
     statfsp->f_ffree = 0;
 
     /*
-     * Compose fsid_t from the mount point id and the file system
-     * type number, which was assigned when the file system was
-     * registered. This pair of values just has to be unique.
+     * f_fsid is deliberately NOT composed here. It is assigned once, by
+     * vfs_getnewfsid(), in procfs_mount().
+     *
+     * This used to be built as {pmnt_id, vfs_typenum(mp)} on the assumption
+     * that the *pair* only had to be unique. That assumption is wrong:
+     * consumers key on val[0] alone as the device id - this filesystem does it
+     * itself in procfs_linux.c ("dev_t dev = (dev_t)st->f_fsid.val[0]").
+     * pmnt_id is a per-filesystem counter starting at zero, so procfs's first
+     * mount and the sysfs sibling's first mount both published device id 1.
+     * CoreServices keeps one volume per device id in its FileIDTree and aborts
+     * outright on the duplicate:
+     *
+     *     "FileIDTree: volume for device id 0x%x already exists."
+     *
+     * which kills coreservicesd every time it syncs its volume universe, so
+     * applications stop launching and the Dock stops responding for as long as
+     * both filesystems are mounted together.
      */
-    statfsp->f_fsid.val[0] = MPTOPMP(mp)->pmnt_id;
-    statfsp->f_fsid.val[1] = vfs_typenum(mp);
 
     bzero(statfsp->f_mntfromname, sizeof(statfsp->f_mntfromname));
     if (mounted_instance_count == 1) {
