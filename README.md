@@ -60,7 +60,7 @@ or omitted:
 | Piece | What it does | Where |
 |-------|--------------|-------|
 | **Filesystem Hierarchy Standard** | The Linux filesystem layout, natively | [mSL/FHS](https://github.com/mslxnu/mSL-FHS) |
-| **Syscall translation** | Linux system calls onto Darwin's, over `Hypervisor.framework` | [mSL/NABI](https://github.com/somestupidgirl/mSL-NABI) |
+| **Syscall translation** | Linux system calls onto Darwin's, over `Hypervisor.framework` | [mSL/NABI](https://github.com/mslxnu/mSL-NABI) |
 | **procfs** | `/proc`, as a real filesystem | **this repository** |
 | **sysfs** | `/sys`, as a real filesystem | [mSL/SysFS](https://github.com/mslxnu/mSL-SysFS) |
 | **devfs** | `/dev` — already part of macOS | XNU |
