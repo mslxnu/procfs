@@ -46,29 +46,49 @@ it is but for now it is not supported.
 
 ## The larger project
 
-mSL/XNU — *macOS Subsystem for Linux / X is Now UNIX* — aims at **native, seamless
-execution of Linux ELF binaries on macOS**: not in a container and not in a virtual
-machine, but as ordinary processes on the running system.
+mSL/XNU — macOS Subsystem for Linux / X is Now UNIX — is a set of compatibility layers
+and utilities for macOS that aim at improving system compatibility with ported Linux,
+BSD and other Unix-like code.
+
+It also aims at native, seamless execution of Linux ELF binaries on macOS: not in a
+container and not in a virtual machine, but as ordinary processes on the running system.
 
 Reaching that needs several independent pieces, which is why the project is modular
-rather than one monolith. Each is useful on its own, and each can be installed,
-replaced or omitted:
+rather than one monolith. Each is useful on its own, and each can be installed, replaced
+or omitted:
 
 | Piece | What it does | Where |
 |-------|--------------|-------|
-| **Filesystem Hierarchy Standard** | The Linux filesystem layout, natively | [mSL/FHS](https://github.com/somestupidgirl/mSL-FHS) |
+| **Filesystem Hierarchy Standard** | The Linux filesystem layout, natively | [mSL/FHS](https://github.com/mslxnu/mSL-FHS) |
 | **Syscall translation** | Linux system calls onto Darwin's, over `Hypervisor.framework` | [mSL/NABI](https://github.com/somestupidgirl/mSL-NABI) |
 | **procfs** | `/proc`, as a real filesystem | **this repository** |
-| **sysfs** | `/sys`, likewise | [mSL/SysFS](https://github.com/somestupidgirl/mSL-SysFS) |
+| **sysfs** | `/sys`, as a real filesystem | [mSL/SysFS](https://github.com/mslxnu/mSL-SysFS) |
 | **devfs** | `/dev` — already part of macOS | XNU |
 
 **This repository is the ProcFS piece**, and it is largely done. The
 rest of this document describes it.
 
 ## What is ProcFS?
-*procfs* lets you view the processes running on a UNIX system as nodes in the file system, where each process is represented by a single directory named from its process id. Typically, the file system is mounted at `/proc`, so the directory for process 1 would be called `/proc/1`. Beneath a process’ directory are further directories and files that give more information about the process, such as its process id, its active threads, the files that it has open, and so on. *procfs* first appeared in an early version of AT&T’s UNIX and was later implemented in various forms in System V, BSD, Solaris and Linux. You can find a history of the implementation of *procfs* at https://en.wikipedia.org/wiki/Procfs.
+*procfs* lets you view the processes running on a UNIX system as nodes in the file system,
+where each process is represented by a single directory named from its process id. Typically,
+the file system is mounted at `/proc`, so the directory for process 1 would be called `/proc/1`.
+Beneath a process’ directory are further directories and files that give more information about
+the process, such as its process id, its active threads, the files that it has open, and so on.
+*procfs* first appeared in an early version of AT&T’s UNIX and was later implemented in various
+forms in System V, BSD, Solaris and Linux. You can find a history of the implementation of
+*procfs* at https://en.wikipedia.org/wiki/Procfs.
 
-In addition to letting you visualize running processes, *procfs* also allows some measure of control over them, at least to suitably privileged users. By writing specific data structures to certain files, you could do such things as set breakpoints and read and write process memory and registers. In fact, on some systems, this was how debugging facilities were provided. However, more modern operating systems do this differently, so some UNIX variants no longer include an implementation of *procfs*. In particular, macOS doesn’t provide *procfs* so, although it’s not strictly needed, I thought that implementing it would be an interesting side project. The code in this repository provides an implementation of *procfs* for macOS. You can use it to see what processes and threads are running on the system and what files they have open. Later, I plan to add more features, beginning with the ability to inspect a thread’s address space to see which executable it is running and what shared libraries it has loaded.
+In addition to letting you visualize running processes, *procfs* also allows some measure of
+control over them, at least to suitably privileged users. By writing specific data structures to
+certain files, you could do such things as set breakpoints and read and write process memory and
+registers. In fact, on some systems, this was how debugging facilities were provided. However,
+more modern operating systems do this differently, so some UNIX variants no longer include an
+implementation of *procfs*. In particular, macOS doesn’t provide *procfs* so, although it’s not
+strictly needed, I thought that implementing it would be an interesting side project. The code in
+this repository provides an implementation of *procfs* for macOS. You can use it to see what
+processes and threads are running on the system and what files they have open. Later, I plan to
+add more features, beginning with the ability to inspect a thread’s address space to see which
+executable it is running and what shared libraries it has loaded.
 
 Tested on:
 
