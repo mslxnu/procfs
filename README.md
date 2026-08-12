@@ -4,15 +4,43 @@
 [![Platform](https://img.shields.io/badge/Platform-macOS-lightgrey)](#build)
 [![GitHub stars](https://img.shields.io/github/stars/somestupidgirl/mSL-ProcFS.svg?style=social&label=Star&maxAge=2592000)](https://GitHub.com/somestupidgirl/mSL-ProcFS/stargazers/)
 
-mSL/ProcFS is a kernel-extension implementation of the `/proc` file system for macOS,
-exposing running processes and threads as a filesystem with BSD- and Linux-compatible
-per-process information.
-
 **macOS Subsystem for Linux / ProcFS** — a native kernel-extension implementation of the
 `/proc` file system for macOS, exposing running processes and threads as a filesystem
 with BSD- and Linux-compatible per-process information.
 
-One module of **mSL/XNU**, a modular macOS Subsystem for Linux.
+<p align="center">
+<img width="1470" height="956" alt="procfs" src="https://github.com/user-attachments/assets/2e7502d2-40a7-424b-9551-f2038516d02e" />
+</p>
+
+mSL/ProcFS is a kernel-extension implementation of the `/proc` file system for macOS,
+exposing running processes and threads as a filesystem with BSD- and Linux-compatible
+per-process information.
+
+I started this project several years ago as a fork of the [`ProcFS`](https://github.com/kimtopley/ProcFS)
+kernel patch for XNU by Kim Topley--a bare minimum procfs implementation for XNU. I had
+been trying to port some Linux utilities over to macOS but they relied heavily on Linux'
+/proc filesystem. It annoyed me that /proc didn't exist on macOS so, using the patch as
+a foundation (with the original author's permission), I turned it into a kext and began
+expanding upon it. It has since diverged heavily from the original kernel patch, with
+various feature additions and a FreeBSD-style Linux-compatibility layer.
+
+The code was written entirely by hand from 2022 to 2024 and I put a lot of research and
+effort into it. I picked it up again in 2026 to port it over to Apple Silicon and add
+more BSD and Linux-compatibility features, using Claude to speed up development and
+perform large batch operations. It now also features a GUI and can be used to supplement
+my [mSL/NABI](https://github.com/somestupidgirl/mSL-NABI) project.
+
+Originally I used an x86_64 symbol resolver for resolving private kernel symbols. This
+has turned out not to be ideal for Apple Silicon so it now also features a user-space
+daemon for feeding the relevant data to the kernel extension.
+
+Since this is a kernel extension it does require partially disabling SIP via recovery.
+It may also run into issues on older kernel versions. mSL/ProcFS is currently only
+officially supported for Apple Silicon running macOS 26.5.2 (Darwin 25.5.0), retaining
+untested legacy support for x86_64.
+
+I might try to port this over to FSKit later down the road depending on how feasible
+it is but for now it is not supported.
 
 ## The larger project
 
