@@ -2,8 +2,7 @@
 [![C/C++ CI](https://github.com/somestupidgirl/mSL-ProcFS/actions/workflows/c-cpp.yml/badge.svg)](https://github.com/somestupidgirl/mSL-ProcFS/actions/workflows/c-cpp.yml) 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Platform](https://img.shields.io/badge/Platform-macOS-lightgrey)](#build)
-[![Architecture](https://img.shields.io/badge/Architecture-arm64-blue)](#status)
-[![Architecture](https://img.shields.io/badge/Architecture-x86_64-blue)](#status)
+![Architecture](https://img.shields.io/badge/arch-arm64e%20%7C%20x86__64-blue.svg)
 [![GitHub stars](https://img.shields.io/github/stars/somestupidgirl/mSL-ProcFS.svg?style=social&label=Star&maxAge=2592000)](https://GitHub.com/somestupidgirl/mSL-ProcFS/stargazers/)
 
 **macOS Subsystem for Linux / ProcFS** — a native kernel-extension implementation of the
