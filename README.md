@@ -59,11 +59,11 @@ or omitted:
 
 | Piece | What it does | Where |
 |-------|--------------|-------|
-| **Filesystem Hierarchy Standard** | The Linux filesystem layout, natively | [mSL/FHS](https://github.com/mslxnu/mSL-FHS) |
 | **Syscall translation** | Linux system calls onto Darwin's, over `Hypervisor.framework` | [mSL/NABI](https://github.com/mslxnu/mSL-NABI) |
-| **procfs** | `/proc`, as a real filesystem | **this repository** |
-| **sysfs** | `/sys`, as a real filesystem | [mSL/SysFS](https://github.com/mslxnu/mSL-SysFS) |
-| **devfs** | `/dev` — already part of macOS | XNU |
+| **Filesystem Hierarchy Standard** | Native Linux-style filesystem layout | [mSL/FHS](https://github.com/mslxnu/fhs) |
+| **procfs** | `/proc`, as a native pseudo-filesystem | **this repository** |
+| **sysfs** | `/sys`, as a native pseudo-filesystem | [mSL/SysFS](https://github.com/mslxnu/sysfs) |
+| **devfs** | `/dev` driver add-ons for macOS | [mSL/DevFS](https://github.com/mslxnu/devfs) |
 
 **This repository is the ProcFS piece**, and it is largely done. The
 rest of this document describes it.
